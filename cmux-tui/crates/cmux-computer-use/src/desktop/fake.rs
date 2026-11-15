@@ -107,6 +107,8 @@ pub struct FakeDesktop {
     pub pasteboard: Mutex<i64>,
     /// The next input writes to the pasteboard.
     pub copies_on_input: Mutex<bool>,
+    /// Set: delivered results ask for a read-back, which answers this.
+    pub reads_back: Mutex<Option<bool>>,
 }
 
 /// A fake watch: the signals the desktop's `signals` holds when read.
@@ -193,6 +195,7 @@ impl FakeDesktop {
             signals: std::sync::Arc::new(Mutex::new(None)),
             pasteboard: Mutex::new(0),
             copies_on_input: Mutex::new(false),
+            reads_back: Mutex::new(None),
         }
     }
 
@@ -224,7 +227,12 @@ impl FakeDesktop {
     /// The window's pop-ups as tree elements, an open one with its menu.
     /// A delivered result, showing where [`Self::shows`] says.
     fn delivered(&self) -> ActionOutcome {
-        ActionOutcome { shows: lock(&self.shows).clone(), ..ActionOutcome::delivered("fake") }
+        let expect = lock(&self.reads_back).map(|_| Expect { token: 1, what: "text".into() });
+        ActionOutcome {
+            shows: lock(&self.shows).clone(),
+            expect,
+            ..ActionOutcome::delivered("fake")
+        }
     }
 
     /// The bundle ids of the installed or running apps named `name`.
@@ -415,6 +423,9 @@ impl Desktop for FakeDesktop {
     }
     fn watch(&self, _window_id: &str) -> Option<Box<dyn Watch>> {
         Some(Box::new(FakeWatch(self.signals.clone())))
+    }
+    fn read_back(&self, _expect: &Expect) -> Option<bool> {
+        *lock(&self.reads_back)
     }
     fn world(&self) -> Option<World> {
         let opened = lock(&self.opened);
